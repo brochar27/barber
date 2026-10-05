@@ -14,7 +14,7 @@ const fraunces = Fraunces({
 
 export const metadata: Metadata = {
   title: "Barber",
-  description: "Clients and appointments",
+  description: "Cuts and beard work. Book a chair.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

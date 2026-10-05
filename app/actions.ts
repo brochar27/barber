@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { pool } from "@/lib/db";
+import { priceFor } from "@/lib/menu";
 
 export type FormState = { error: string } | { ok: true } | null;
 
@@ -43,7 +44,7 @@ export async function createClient(
     throw error;
   }
 
-  revalidatePath("/");
+  revalidatePath("/book");
   return { ok: true };
 }
 
@@ -87,7 +88,7 @@ export async function createAppointment(
     throw error;
   }
 
-  revalidatePath("/");
+  revalidatePath("/book");
   return { ok: true };
 }
 
@@ -101,5 +102,46 @@ export async function setAppointmentStatus(formData: FormData) {
     status,
     id,
   ]);
-  revalidatePath("/");
+  revalidatePath("/book");
+}
+
+export async function bookVisit(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const name = String(formData.get("name") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+  const service = String(formData.get("service") ?? "").trim();
+  const startsAtRaw = String(formData.get("startsAt") ?? "").trim();
+  const priceCents = priceFor(service);
+
+  if (!name || !phone || !startsAtRaw) {
+    return { error: "Name, phone, and time are required." };
+  }
+
+  if (priceCents === null) {
+    return { error: "Pick a service from the menu." };
+  }
+
+  const startsAt = new Date(startsAtRaw);
+  if (Number.isNaN(startsAt.getTime())) {
+    return { error: "That time is not valid." };
+  }
+
+  const client = await pool.query<{ id: string }>(
+    `INSERT INTO clients (name, phone)
+     VALUES ($1, $2)
+     ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name
+     RETURNING id::text`,
+    [name, phone],
+  );
+
+  await pool.query(
+    `INSERT INTO appointments (client_id, starts_at, service, price_cents, status)
+     VALUES ($1, $2, $3, $4, 'booked')`,
+    [client.rows[0].id, startsAt.toISOString(), service, priceCents],
+  );
+
+  revalidatePath("/book");
+  return { ok: true };
 }
